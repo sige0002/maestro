@@ -31,6 +31,11 @@ from segment_anything import SamPredictor, sam_model_registry
 
 app = FastAPI()
 
+
+@app.get('/health')
+def health():
+    return {'status': 'ready', 'service': 'GroundingDINO+SAM', 'device': DEVICE}
+
 # ---------------- config ----------------
 PORT = int(os.environ.get("GROUNDEDSAM_PORT", "8005"))
 CONFIG_FILE = os.path.join(os.path.dirname(groundingdino.__file__), "config", "GroundingDINO_SwinT_OGC.py")
@@ -129,4 +134,4 @@ async def segment(image: UploadFile, prompt: str = Form(...)):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=PORT)
+    uvicorn.run(app, host=os.environ.get('GROUNDEDSAM_HOST', '0.0.0.0'), port=PORT)

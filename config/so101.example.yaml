@@ -1,0 +1,38 @@
+# All positions are base_link metres, all six joints are absolute radians.
+urdf: /so101/models/so101/so101_new_calib_camera.urdf
+use_sim_time: true  # Motion backend is currently MuJoCo-only; sim clock is /so101/clock
+state_topic: /so101/left/follower/joint_states
+command_topic: /so101/left/follower/joint_commands
+cameras:
+  wrist: /so101/cameras/innomaker/image_raw/compressed
+  overview: /so101/cameras/c920/image_raw/compressed
+depth_topics:
+  overview: /so101/cameras/c920/depth/image_raw
+  wrist: /so101/cameras/innomaker/depth/image_raw
+camera_info_topics:
+  wrist: /so101/cameras/innomaker/camera_info
+  overview: /so101/cameras/c920/camera_info
+# True only for a verified camera_info + base_link TF, e.g. the MuJoCo camera.
+# For physical cameras this requires actual intrinsic/extrinsic calibration.
+calibrated_overview: false
+# Legacy cube-macro runner setting; shared agent always uses checked motion.
+sim_manipulation: false
+max_age_s: 2.0
+command_hz: 30
+max_velocity_rad_s: 0.4
+joint_tolerance_rad: 0.08
+settle_timeout_s: 5.0
+gripper_open_rad: 0.65
+gripper_closed_rad: 0.0  # lower bound; contact-aware closing stops at resistance
+# Folded rest pose matched to the supplied SO101 reference photograph.
+home_rad: [0, -1.63, 1.43, 1.06, 0, 0.15]
+
+# SAM 3.1 handles text detection and masks; no GroundingDINO/SAM 1 fallback.
+segmentation_backend: sam3
+workspace_segmentation_prompt: "colored object"
+
+# RGB-only depth; sensor topics above are ignored unless explicitly selected.
+depth_backend: depth_anything
+depth_anything:
+  url: http://127.0.0.1:8007
+  metric_scale: 1.0  # Calibrate against known geometry for each camera/setup.

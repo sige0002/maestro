@@ -1,7 +1,13 @@
 # Maestro configuration — copy to config/maestro.yaml and edit.
 
 vlm:                          # the planner, object pointing and part-point selection
-  provider: gemini            # gemini or astra; keys GEMINI_KEY / OPENAI_API_KEY come from .env
+  provider: gemini            # gemini, astra or local; cloud keys come from .env
+  local:                     # provider: local for a vision-enabled llama.cpp server
+    base_url: http://127.0.0.1:18082/v1
+    model: maestro-qwen-vl
+    temperature: 0.1
+    max_tokens: 2048
+    timeout_s: 300
   gemini:                     # Gemini plans and points; OpenAI o3 selects part points
     planner: gemini-2.5-pro
     temperature: 0.1
@@ -16,6 +22,9 @@ services:                     # GPU services from compose.yaml; each can run on 
   foundation_stereo:          # stereo depth
     host: localhost
     port: 5005
+  sam3:
+    host: localhost
+    port: 8008
   groundedsam:                # open-vocabulary segmentation
     host: localhost
     port: 8005

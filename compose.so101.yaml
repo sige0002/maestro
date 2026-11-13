@@ -1,0 +1,25 @@
+name: maestro-so101
+services:
+  maestro:
+    build:
+      context: .
+      dockerfile: docker/so101/Dockerfile
+      args:
+        ROS_IMAGE: ${MAESTRO_ROS_IMAGE:-ros:jazzy-ros-base}
+    image: maestro-so101:jazzy
+    network_mode: host
+    ipc: host
+    init: true
+    environment:
+      ROS_DOMAIN_ID: ${MAESTRO_ROS_DOMAIN_ID:-71}
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+      PYTHONUNBUFFERED: '1'
+      MAESTRO_HOME: /maestro
+      GEMINI_KEY: ${GEMINI_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      - ./maestro:/maestro/maestro:ro
+      - ./config:/maestro/config:ro
+      - ./runs:/maestro/runs
+      - ${SO101_ROOT:-../so101}/models:/so101/models:ro
+      - ${SO101_ROOT:-../so101}/scripts/models:/so101/scripts/models:ro

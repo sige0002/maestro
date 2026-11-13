@@ -11,7 +11,7 @@ from PIL import Image
 import requests
 
 from maestro import vlm
-from maestro.api import SceneScanCache
+from maestro.scan_cache import SceneScanCache
 from maestro.perception_utils import fuse_observation, segment, stereo_depth
 
 
@@ -65,6 +65,20 @@ class PerceptionContractTests(unittest.TestCase):
         post.side_effect = requests.HTTPError('depth service unavailable')
         with self.assertRaises(requests.HTTPError):
             stereo_depth(image, image, calibration)
+
+    def test_rgbd_cache_roundtrip_does_not_invent_stereo_image(self):
+        with TemporaryDirectory() as tmp:
+            cache = SceneScanCache(tmp)
+            cache.set([{'left_image': np.zeros((8, 8, 3), dtype=np.uint8),
+                        'depth': np.ones((8, 8)), 'target_joints': np.zeros(6),
+                        'intrinsics': np.eye(3), 'cam_pose': np.eye(4),
+                        'source': 'simulated_RGBD_not_stereo'}])
+            cache.save_to_disk()
+            loaded = cache.load_from_disk()
+            self.assertEqual(len(loaded), 1)
+            self.assertIsNone(loaded[0]['right_image'])
+            self.assertEqual(loaded[0]['source'], 'simulated_RGBD_not_stereo')
+            np.testing.assert_equal(loaded[0]['depth'], np.ones((8, 8)))
 
     @patch('maestro.perception_utils.requests.post')
     def test_segmentation_without_detections_is_empty(self, post):

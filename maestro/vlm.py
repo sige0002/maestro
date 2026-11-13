@@ -3,6 +3,7 @@
 `vlm.provider` in config/maestro.yaml selects the models for all three roles:
   gemini  Gemini plans and points; OpenAI o3 picks among the numbered points on an object part.
   astra   GPT-6 Astra does all three.
+  local   A vision-enabled local Chat Completions server does all three.
 """
 from __future__ import annotations
 
@@ -20,8 +21,8 @@ from pydantic import BaseModel, Field
 from maestro.config import cfg
 
 PROVIDER = cfg.vlm.provider
-if PROVIDER not in ("gemini", "astra"):
-    raise ValueError(f"vlm.provider must be 'gemini' or 'astra', not {PROVIDER!r}")
+if PROVIDER not in ("gemini", "astra", "local"):
+    raise ValueError(f"vlm.provider must be 'gemini', 'astra' or 'local', not {PROVIDER!r}")
 SETTINGS = cfg.vlm[PROVIDER]
 POINTING_MODEL = SETTINGS['pointing'] if PROVIDER == "gemini" else SETTINGS['model']
 
@@ -106,12 +107,44 @@ class _AstraChat:
         return response.output_parsed, response.output_text
 
 
+class _LocalChat:
+    """Vision + structured JSON via a local llama.cpp Chat Completions server."""
+    def __init__(self):
+        self._history = []
+
+    def send(self, message, schema):
+        import requests
+        parts = []
+        for part in _openai_content(message):
+            if part['type'] == 'input_text':
+                parts.append({'type': 'text', 'text': part['text']})
+            else:
+                parts.append({'type': 'image_url', 'image_url': {'url': part['image_url']}})
+        response = requests.post(SETTINGS['base_url'].rstrip('/') + '/chat/completions', json={
+            'model': SETTINGS['model'],
+            'messages': [*self._history, {'role': 'user', 'content': parts}],
+            'temperature': float(SETTINGS.get('temperature', .1)),
+            'max_tokens': int(SETTINGS.get('max_tokens', 2048)),
+            'response_format': {'type': 'json_schema', 'json_schema': {
+                'name': schema.__name__, 'schema': schema.model_json_schema()}},
+        }, timeout=(10, float(SETTINGS.get('timeout_s', 300))))
+        response.raise_for_status()
+        choice = response.json()['choices'][0]
+        if choice['finish_reason'] != 'stop':
+            raise RuntimeError(f"Local VLM did not finish: {choice['finish_reason']}")
+        raw = choice['message']['content']
+        parsed = schema.model_validate_json(raw)
+        self._history.extend([{'role': 'user', 'content': [p for p in parts if p['type'] == 'text']},
+                              {'role': 'assistant', 'content': raw}])
+        return parsed, raw
+
+
 def planner_chat():
     """A planner conversation: `send(message, schema)` returns (parsed schema, raw text).
 
     A message is a list of strings and PIL images; earlier turns keep only their text.
     """
-    return _GeminiChat() if PROVIDER == "gemini" else _AstraChat()
+    return {'gemini': _GeminiChat, 'astra': _AstraChat, 'local': _LocalChat}[PROVIDER]()
 
 
 # ---------- pointing ----------
@@ -129,12 +162,31 @@ class _Detections(BaseModel):
     detections: list[_PointDetection]
 
 
+class _XYDetection(BaseModel):
+    x: Coordinate = Field(description='Horizontal coordinate: left=0, right=1000')
+    y: Coordinate = Field(description='Vertical coordinate: top=0, bottom=1000')
+    label: str
+    pose_index: int = Field(ge=1)
+
+
+class _XYDetections(BaseModel):
+    detections: list[_XYDetection]
+
+
 def point(images, labels):
     """Points on `labels` across wrist images (RGB arrays).
 
     Returns [{'point': [y, x] normalized to 0-1000, 'label': str, 'pose_index': 1-based}].
     """
     n = len(images)
+    if PROVIDER == 'local':
+        prompt = (f'Locate {labels} in these {n} images. Return detections with exact label, '
+                  'pose_index (1-based image index), x and y normalized to 0..1000. '
+                  'x is HORIZONTAL (left=0, right=1000). y is VERTICAL (top=0, bottom=1000). '
+                  'Point at the visible centre; omit objects not visible.')
+        parsed, _ = _LocalChat().send([prompt, *[Image.fromarray(im) for im in images]], _XYDetections)
+        return [{'point': [d.y, d.x], 'label': d.label, 'pose_index': d.pose_index}
+                for d in parsed.detections if d.pose_index <= n]
     if PROVIDER == "gemini":
         from google.genai import types
         prompt = f"""You are given {n} RGB images from different wrist camera poses (pose 1 to pose {n}).
@@ -195,6 +247,9 @@ def select_points(image, points, instruction):
 
     `points` describes the candidates; returns [{'index': int, 'label': str}].
     """
+    if PROVIDER == 'local':
+        parsed, _ = _LocalChat().send([SELECTION_PROMPT, image, str(points), instruction], _Selections)
+        return [p.model_dump() for p in parsed.points]
     if PROVIDER == "gemini":
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")

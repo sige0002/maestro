@@ -11,11 +11,11 @@ import io
 
 import cv2
 import numpy as np
-import PIL.Image as Image
 import requests
+from PIL import Image
 
-from maestro.config import service_url
 from maestro.camera_geometry import camera_matrix, stereo_geometry
+from maestro.config import service_url
 
 
 def _png(image):
@@ -40,20 +40,26 @@ def stereo_depth(left_image, right_image, calibration):
     return depth
 
 
-def segment(image, prompt):
-    """GroundedSAM detections of `prompt` in an RGB image.
+def segment(image, prompt, service="groundedsam"):
+    """Text detections/masks from an explicit SAM3 or legacy GroundedSAM service.
 
     Returns a dict of per-detection arrays: `masks` (N, H, W bool), `boxes` (N, 4 pixel
     x0, y0, x1, y1), `scores` (N,) and `labels` (N,); N is 0 when nothing is found.
     """
     response = requests.post(
-        service_url("groundedsam") + "/segment",
+        service_url(service) + "/segment",
         files={"image": ("image.png", _png(image), "image/png")},
         data={"prompt": prompt},
         timeout=(10, 180))
     response.raise_for_status()
     with np.load(io.BytesIO(response.content), allow_pickle=False) as result:
-        return {key: result[key] for key in ("masks", "boxes", "scores", "labels")}
+        detections = {key: result[key] for key in ("masks", "boxes", "scores", "labels")}
+        for key in ("backend", "model", "revision", "source_revision", "elapsed_s"):
+            if key in result:
+                detections[key] = result[key]
+        if service == "sam3" and str(detections.get("backend")) != "SAM3.1":
+            raise RuntimeError("SAM3 service did not identify the expected SAM3.1 backend")
+        return detections
 
 
 def draw_segmentation(image, detections):
@@ -63,7 +69,7 @@ def draw_segmentation(image, detections):
     for i, (mask, box, score, label) in enumerate(zip(*(detections[k] for k in ("masks", "boxes", "scores", "labels")))):
         color = colors[i % len(colors)]
         canvas[mask] = (0.5 * canvas[mask] + 0.5 * np.array(color)).astype(np.uint8)
-        x0, y0, x1, y1 = (int(round(v)) for v in box)
+        x0, y0, x1, y1 = (round(v) for v in box)
         cv2.rectangle(canvas, (x0, y0), (x1, y1), color, 2)
         cv2.putText(canvas, f"{label} {score:.2f}", (x0, max(y0 - 6, 12)),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)

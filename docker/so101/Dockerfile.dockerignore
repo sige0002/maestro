@@ -1,0 +1,10 @@
+*
+!maestro/
+!maestro/**
+!config/
+!config/maestro.example.yaml
+!config/so101.example.yaml
+!docker/
+!docker/so101/
+!docker/so101/**
+**/__pycache__/

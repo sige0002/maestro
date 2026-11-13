@@ -1,6 +1,7 @@
 # Secrets and local config
 .env
 config/maestro.yaml
+config/so101.yaml
 
 # Robot/camera-specific data (each robot calibrates its own; never commit)
 droid/calibration/calibration_info*.json
@@ -24,6 +25,8 @@ nohup.out
 *.pth
 *.pt
 *.ckpt
+*.safetensors
+*.gguf
 *.svo
 *.svo2
 *.mp4

@@ -1,4 +1,6 @@
 <h1 align="center">MAESTRO</h1>
+
+SO101 MuJoCo adaptation: [setup, shared agent harness, backend differences and verification](docs/SO101.md).
 <p align="center">
   <b>Orchestrating Robotics Modules with Coding Agents for Zero-Shot Generalist Robots</b><br>
   <a href="https://maestro-robot.github.io/">Project page</a> ·
